@@ -11,7 +11,6 @@ from langchain_ollama import ChatOllama
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnablePassthrough
-# from langchain_community.document_loaders import UnstructuredMarkdownLoader
 
 # color codes
 RED = "\033[31m"
@@ -20,25 +19,30 @@ MAGENTA = "\033[35m"
 RESET = "\033[0m"
 
 RAG_TEMPLATE = """
-You need to answer a question given the following pieces of retrieved context. If you don't know the answer, just say that you don't know. Give as many details as possible, preferably in an outline format with bullet points and headings as needed. If it makes sense, use paragraphs as needed. Make sure that if code is included, it is maintained in your answer and is given preference. Ensure that the content is relevant to the question and is has maximum coverage of the context provided.
+You are an assistant tasked with answering a question using the following retrieved context. Follow these guidelines to provide the most accurate and relevant answer:
 
-<context>
+1. **If you don't know the answer based on the context, explicitly say "I don't know based on the provided context."** Avoid guessing or adding details not found in the context.
+2. **Provide information in an organized, hierarchical format**: Use headings, bullet points, and numbering for clear structure, and employ paragraphs where appropriate.
+3. **Include all relevant code snippets**: If the context includes code, ensure it is reproduced accurately in the answer.
+4. **Focus on relevance**: Only include details directly related to the question. Do not introduce arbitrary or unrelated information from the context.
+5. **Avoid redundancy**: Summarize where possible and avoid repeating information unless necessary for clarity.
+6. **Acronyms**: For any acronyms you encounter in the query, do not use pre-existing knowledge. Instead, use the context provided to determine the meaning of the acronym.
+
+**Context**:
 {context}
-</context>
 
-Answer the following question:
+**Question**:
+{question}
 
-{question}"""
+**Answer**:"""
 
 def format_docs(docs):
     return "\n\n".join(doc.page_content for doc in docs)
 
 loader = DirectoryLoader("docs/", glob="**/*.md", loader_cls=TextLoader, use_multithreading=True) # show_progress=True
 documents = loader.load()
-# todo - pre process with llm (put keywords)
-text_splitter = RecursiveCharacterTextSplitter(chunk_size=5000, chunk_overlap=500)
+text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
 all_splits = text_splitter.split_documents(documents)
-# todo - try open ai
 local_embeddings = OllamaEmbeddings(model="mxbai-embed-large", base_url="http://host.docker.internal:11434")
 
 qdrant = QdrantClient("http://host.docker.internal",port=6333)
@@ -69,11 +73,11 @@ else:
         collection_name=vectordbname,
         embedding=local_embeddings,
     )
-    batch_size = 25
-    delay = 1.5
+    batch_size = 35
+    delay = 0.5
     print(f"{BLUE}[+] Generated {len(all_splits)} splits across all documents.{RESET}", flush=True)
     print(f"{BLUE}[+] Proceeding to add {int(len(all_splits) // batch_size)+1} batches of documents.{RESET}", flush=True)
-    print(f"{BLUE}[!] This will take at least {int(len(all_splits) // batch_size)*3} seconds.{RESET}", flush=True)
+    print(f"{BLUE}[!] This will take at least {int(len(all_splits) // batch_size)*delay} seconds.{RESET}", flush=True)
     for i in range(0, len(all_splits), batch_size):
         batch = all_splits[i:i + batch_size]
         try:
@@ -89,18 +93,18 @@ else:
 
 def hybrid_search(query, vectorstore, k):
     vector_results = vectorstore.as_retriever(search_type="similarity", search_kwargs={"k": k}).invoke(query)
-    # keyword encrichment
+    # TODO - Add keyword search results
     print(f"{RED}Found {len(vector_results)} documents.{RESET}")
-    # print(f"{RED}", vector_results, f"{RESET}\n\n")
     return vector_results
 
 def format_hybrid_docs(query):
-    docs = hybrid_search(query, vectorstore, k=30)
-    return "\n\n".join(doc.page_content for doc in docs)
+    docs = hybrid_search(query, vectorstore, k=10)
+    returndata = "\n\n".join(doc.page_content for doc in docs)
+    return returndata
 
 model = ChatOllama(
     model="llama3.1:8b",
-    temperature=0.05,
+    temperature=0,
     base_url="http://host.docker.internal:11434",
 )
 
