@@ -36,9 +36,6 @@ You are an assistant tasked with answering a question using the following retrie
 
 **Answer**:"""
 
-def format_docs(docs):
-    return "\n\n".join(doc.page_content for doc in docs)
-
 loader = DirectoryLoader("docs/", glob="**/*.md", loader_cls=TextLoader, use_multithreading=True) # show_progress=True
 documents = loader.load()
 text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
@@ -73,11 +70,11 @@ else:
         collection_name=vectordbname,
         embedding=local_embeddings,
     )
-    batch_size = 35
-    delay = 0.5
+    batch_size = 30
+    delay = 0.3
     print(f"{BLUE}[+] Generated {len(all_splits)} splits across all documents.{RESET}", flush=True)
     print(f"{BLUE}[+] Proceeding to add {int(len(all_splits) // batch_size)+1} batches of documents.{RESET}", flush=True)
-    print(f"{BLUE}[!] This will take at least {int(len(all_splits) // batch_size)*delay} seconds.{RESET}", flush=True)
+    print(f"{BLUE}[!] This will take at least {int((len(all_splits) // batch_size)*delay)} seconds.{RESET}", flush=True)
     for i in range(0, len(all_splits), batch_size):
         batch = all_splits[i:i + batch_size]
         try:
@@ -89,12 +86,12 @@ else:
     print(f"\n\n{BLUE}[+] Done adding documents.{RESET}", flush=True)
     print(f"{MAGENTA}--------------------------------------------------------------------------{RESET}\n\n", flush=True)
 
-# keyword_retriever = KeywordRetriever(documents=all_splits)
-
 def hybrid_search(query, vectorstore, k):
     vector_results = vectorstore.as_retriever(search_type="similarity", search_kwargs={"k": k}).invoke(query)
     # TODO - Add keyword search results
     print(f"{RED}Found {len(vector_results)} documents.{RESET}")
+    for doc in vector_results:
+        print(f"{BLUE}[*] {doc.metadata}{RESET}")
     return vector_results
 
 def format_hybrid_docs(query):
